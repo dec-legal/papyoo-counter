@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  papyoo-counter:
+    build: .
+    container_name: papyoo-counter
+    restart: always
+    ports:
+      - "3000:3000"
+    networks:
+      - webnet
+
+networks:
+  webnet:
+    external: true
