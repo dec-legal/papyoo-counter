@@ -6,5 +6,3 @@ dist
 .vscode
 *.log
 *.tmp
-/package-lock.json
-/pnpm-lock.yaml
