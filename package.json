@@ -6,8 +6,8 @@
   "workspaces": ["client", "server"],
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
-    "build": "pnpm -r run build",
-    "start": "pnpm --filter server run start"
+    "build-client": "pnpm --filter client run build",
+    "start-server": "pnpm --filter server run start"
   },
   "author": "",
   "devDependencies": {
