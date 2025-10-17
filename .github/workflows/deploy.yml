@@ -1,42 +1,24 @@
-name: Deploy to VPS
+name: Deploy to VPS via SSH
 
 on:
   push:
-    branches: ["master"]
+    branches:
+      - master
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up PNPM
-        uses: pnpm/action-setup@v3
+      - name: Deploy to Debian VPS via SSH and run deploy.sh
+        uses: appleboy/ssh-action@v1.0.1
         with:
-          version: 9
-
-      - name: Build Docker image
-        run: docker build -t papyoo-counter .
-
-      - name: Copy project to VPS and redeploy
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "."
-          target: "~/papyoo-counter"
-
-      - name: Run deployment on VPS
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
           script: |
-            cd ~/papyoo-counter
-            docker compose down
-            docker compose build --no-cache
-            docker compose up -d
+            cd "/root/papayoo-counter/papyoo-counter"
+            ./deploy.sh
