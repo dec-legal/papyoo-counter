@@ -9,7 +9,7 @@ services:
     ports:
       # Map port 80 on your VPS to port 3000 inside the container.
       # Users will access your app via http://<your-vps-ip>
-      - "80:3000"
+      - "8050:3000"
     environment:
       # Set Node environment to production
       - NODE_ENV=production
