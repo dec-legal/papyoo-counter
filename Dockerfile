@@ -53,5 +53,5 @@ EXPOSE 3000
 # Command to start the server using pm2.
 # PM2's 'no-daemon' mode is essential for Docker.
 # IMPORTANT: Adjust 'server/src/index.js' to your actual server entrypoint file.
-CMD ["pm2-runtime", "start", "server/src/index.js", "--name", "app"]
+CMD ["pm2-runtime", "start", "server/index.js", "--name", "app"]
 
