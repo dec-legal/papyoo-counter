@@ -1,6 +1,6 @@
 # ---- Base Stage ----
-# Use an Alpine-based Node.js image for a smaller size
-FROM node:18-alpine AS base
+# Use a newer Alpine-based Node.js image compatible with your Vite version
+FROM node:20-alpine AS base
 # Install pnpm globally
 RUN npm install -g pnpm
 
