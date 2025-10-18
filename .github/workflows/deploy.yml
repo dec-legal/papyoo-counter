@@ -22,3 +22,26 @@ jobs:
           script: |
             cd "/root/papayoo-counter/papyoo-counter"
             ./deploy.sh
+
+      - name: Create GitHub Deployment
+        id: deployment
+        uses: octokit/request-action@v2.x
+        with:
+          route: POST /repos/${{ github.repository }}/deployments
+          environment: production
+          auto_merge: false
+          required_contexts: []
+          description: "Deploying to VPS at papayoo.m-legal.fr"
+          payload: '{"domain": "https://papayoo.m-legal.fr"}'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Mark Deployment as Successful
+        uses: octokit/request-action@v2.x
+        with:
+          route: POST /repos/${{ github.repository }}/deployments/${{ steps.deployment.outputs.data.id }}/statuses
+          state: success
+          environment_url: https://papayoo.m-legal.fr
+          description: "Deployment succeeded and is live at papayoo.m-legal.fr"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
