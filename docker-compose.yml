@@ -13,7 +13,25 @@ services:
     environment:
       # Set Node environment to production
       - NODE_ENV=production
-      # Add any other environment variables your server needs here
-      # For example:
-      # - DATABASE_URL=...
-      # - API_KEY=...
+      # Mongo connection string points to the mongo service name on the default network
+      - MONGODB_URI=mongodb://mongo:27017/papyoo
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  mongo:
+    image: mongo:6
+    container_name: my-project-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017" # optional: expose for local tooling/backup
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo-data:
