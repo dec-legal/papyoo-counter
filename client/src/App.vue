@@ -70,38 +70,62 @@ export default {
 </script>
 
 <template>
-  <main>
-    <h1>Papayoo counter</h1>
-    <h3 class="mt-20 mb-2 text-left">Players</h3>
-    <div class="flex flex-col gap-2 mb-2">
-      <div v-for="player in players" class="flex justify-between items-center gap-2" :key="player.id">
-        <p class="bg-gray-200 w-full text-left py-1 px-2 rounded">{{ player.username }}</p>
-        <button class="no-style px-3! hover:bg-gray-100! h-full!" @click="disablePlayer(player.id)">x</button>
+  <main class="w-full flex flex-col items-center px-4 pt-5 gap-2 h-full">
+    <img src="@assets/tallLogo.png" alt="" width="300">
+    <h3 class="mt-5 font-[jaro] text-lg w-full">Qui joue ?</h3>
+    <div class="flex flex-col gap-0.5 w-full rounded-2xl max-h-[400px] overflow-y-auto">
+      <div v-for="player in players" class="flex justify-between items-center bg-white gap-2 py-3 px-3 rounded" :key="player.id">
+        <span class="pfp">{{ player.username[0].toUpperCase() }}</span>
+        <p class=" w-full font-medium">{{ player.username }}</p>
+        <div class="px-2 hover:bg-gray-100 h-full cursor-pointer" @click="disablePlayer(player.id)">
+          <i class="fas fa-trash-can"></i>
+        </div>
       </div>
     </div>
     <div class="flex gap-2 w-full">
-      <div class="relative">
+      <div class="relative w-full">
         <input ref="newPlayerInput" type="text" v-model="newPlayerName" @keydown.enter="createPlayer" @keydown.down="focusSuggestion"
-               placeholder="Entrez le nom d'un joueur..." class="w-80">
-        <div v-if="suggestions.length > 0" class="absolute top flex flex-col gap-1 w-full mt-1 bg-gray-300 p-1 rounded-md">
+               placeholder="Entrez le nom d'un joueur..." class="w-full rounded-full! px-4! z-20 relative">
+
+        <div v-if="suggestions.length > 0" class="absolute top-0 pt-11 z-10 flex flex-col gap-1 w-full mt-1 bg-gray-300 p-1 rounded-2xl">
           <div tabindex="0"
                :ref="'suggestion_' + index"
-               class="bg-gray-100 text-black px-2 py-1 w-full text-left rounded-sm hover:bg-gray-200 cursor-pointer"
+               class="bg-gray-100 text-black px-3 py-1.5 w-full rounded-xl hover:bg-gray-200 cursor-pointer"
                v-for="(suggestion, index) in suggestions" @click="enablePlayer(suggestion.id)"
                @keydown.enter="enablePlayer(suggestion.id)">{{ suggestion.username }}
           </div>
         </div>
+
       </div>
-      <button @click="createPlayer">Add player</button>
+      <button @click="createPlayer" class="btn-main">Ajouter</button>
+    </div>
+    <div class="grow w-60 flex flex-col justify-center gap-2">
+      <button class="btn-main w-full py-2.5!">
+        Nouvelle partie
+        <i class="fa fa-play-circle ml-2"/>
+      </button>
+      <button class="btn-secondary w-full">
+        Leaderboard
+        <i class="fa fa-medal ml-2"/>
+      </button>
     </div>
   </main>
 </template>
 
 <style>
-main {
-  font-family: Arial, sans-serif;
-  text-align: center;
-  padding: 2rem;
+
+.pfp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  line-height: 2px;
+  background-color: #d7d7d7;
+  color: #363636;
+  font-weight: 500;
+  font-size: 12px;
 }
 
 button {
