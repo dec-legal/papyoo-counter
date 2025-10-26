@@ -1,17 +1,18 @@
 <template>
-  <div class="mt-3 border p-2 rounded">
-    <strong>Round {{ pending.roundNumber }} — Vérification des scores</strong>
-    <ul class="mt-2">
-      <li v-for="s in pending.scores" :key="s.id" class="flex justify-between py-1">
-        <span>{{ s.username }} <small v-if="s.id===userId">(Vous)</small></span>
-        <span>{{ s.score }}</span>
-      </li>
-    </ul>
+  <div class="mt-3 text-center border py-8 rounded">
+    <div>Votre score : <b>{{playerScore.score}}</b></div>
     <div class="mt-2 flex gap-2">
-      <button @click="$emit('ready')" :disabled="isReady" class="btn-main">Valider<i v-if="isReady" class="fa fa-check ml-2"/></button>
-    </div>
-    <div class="text-sm mt-2">
-      <span>Validés: {{ (pending.ready || []).length }} / {{ playersCount }}</span>
+      <!-- If the current user's score was auto-filled, show a validation button for them -->
+      <button
+        v-if="!isReady"
+        @click="$emit('ready')"
+        :disabled="isReady"
+        class="btn-main mx-auto">
+        Valider le score calculé
+      </button>
+      <div v-else class="text-sm">
+        En attente des autres joueurs ({{pending.ready.length}}/{{playersCount}} prêts)
+      </div>
     </div>
   </div>
 </template>
@@ -28,6 +29,10 @@ export default {
     isReady() {
       if (!this.pending) return false
       return (this.pending.ready || []).includes(this.userId)
+    },
+    playerScore() {
+      if (!this.pending || !this.pending.scores) return null
+      return this.pending.scores.find(s => s.id === this.userId) || null
     }
   }
 }
@@ -36,4 +41,3 @@ export default {
 <style scoped>
 ul { margin: 0; padding: 0; list-style: none; }
 </style>
-

@@ -50,7 +50,7 @@ function finalizePendingRound() {
 
   // Clear pending and reset submittedScore for next round
   currentGame.pendingRound = null
-  currentGame.players.forEach(p => { p.submittedScore = null })
+  currentGame.players.forEach(p => { p.submittedScore = null; delete p._autoFilled })
 
   currentGame.currentRound += 1
 
@@ -114,7 +114,6 @@ export function createApp() {
     // Game routes
     // Get game state for a user (userId = -1 for public home view)
     app.get('/api/game/:userId', (req, res) => {
-      const userId = req.params.userId
       if (!currentGame) return res.json({ game: null })
 
       // For user-specific view we can annotate submitted status
@@ -183,9 +182,12 @@ export function createApp() {
       // Do NOT close joining on first submission; joining stays open until first round finalized
 
       player.submittedScore = Number(score)
+      // Mark this as a manual submission (not auto-filled)
+      player._autoFilled = false
 
-      // Count how many submitted
-      const submittedCount = currentGame.players.filter(p => typeof p.submittedScore === 'number').length
+      // Count how many submitted (manual submissions so far)
+      const manualSubmittedIds = currentGame.players.filter(p => typeof p.submittedScore === 'number').map(p => p.id)
+      const submittedCount = manualSubmittedIds.length
 
       // If only one player left without submission, auto-fill to sum 250
       if (submittedCount === currentGame.players.length - 1) {
@@ -193,6 +195,7 @@ export function createApp() {
         const remaining = currentGame.players.find(p => typeof p.submittedScore !== 'number')
         if (remaining) {
           remaining.submittedScore = 250 - totalSubmitted
+          remaining._autoFilled = true
         }
       }
 
@@ -201,9 +204,20 @@ export function createApp() {
 
       // If all players have submitted, create a pendingRound snapshot that clients can review before NEXT
       if (nowSubmittedCount === currentGame.players.length) {
-        const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore }))
-        currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: [] }
-        // Do NOT update totalScore yet; wait for all players to validate (ready) or for /next to be called
+        // Build roundScores including autoFilled flag
+        const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore, autoFilled: !!p._autoFilled }))
+
+        // Initialize ready list with IDs of players who submitted manually (those with _autoFilled === false)
+        const readyIds = currentGame.players.filter(p => typeof p._autoFilled !== 'undefined' && p._autoFilled === false).map(p => p.id)
+
+        currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: readyIds }
+
+        // If everyone had submitted manually, finalize immediately
+        if (readyIds.length === currentGame.players.length) {
+          finalizePendingRound()
+          broadcastGameUpdate()
+          return res.json({ message: 'Score recorded and round finalized (all submitted manually)' })
+        }
       }
 
       broadcastGameUpdate()
@@ -272,29 +286,41 @@ export function createApp() {
       // If a pendingRound exists, remove the player from it
       if (currentGame.pendingRound) {
         currentGame.pendingRound.scores = currentGame.pendingRound.scores.filter(s => s.id !== userId)
+        currentGame.pendingRound.ready = (currentGame.pendingRound.ready || []).filter(id => id !== userId)
       }
 
       // Remove player
       currentGame.players.splice(idx, 1)
 
       // If players had submitted for current round (submittedScore set), re-evaluate whether a pendingRound should be created
-      const submittedCount = currentGame.players.filter(p => typeof p.submittedScore === 'number').length
+      const manualSubmittedIds = currentGame.players.filter(p => typeof p.submittedScore === 'number').map(p => p.id)
+      const submittedCount = manualSubmittedIds.length
       if (!currentGame.pendingRound) {
         // If after removal, everyone left has submitted, create pendingRound
         if (currentGame.players.length > 0 && submittedCount === currentGame.players.length) {
-          const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore }))
-          currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now() }
-          // Do not apply totals until NEXT
+          const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore, autoFilled: !!p._autoFilled }))
+          const readyIds = currentGame.players.filter(p => typeof p._autoFilled !== 'undefined' && p._autoFilled === false).map(p => p.id)
+          currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: readyIds }
+
+          // finalize immediately if all manual
+          if (readyIds.length === currentGame.players.length) {
+            finalizePendingRound()
+            broadcastGameUpdate()
+            // If no players left after finalize, clear game
+            if (!currentGame) return res.json({ message: 'Left game; game ended' })
+          }
         } else if (submittedCount === currentGame.players.length - 1 && currentGame.players.length > 0) {
           // If only one left without submission, autor-fill
           const totalSubmitted = currentGame.players.reduce((acc, p) => acc + (typeof p.submittedScore === 'number' ? p.submittedScore : 0), 0)
           const remaining = currentGame.players.find(p => typeof p.submittedScore !== 'number')
           if (remaining) {
             remaining.submittedScore = 250 - totalSubmitted
+            remaining._autoFilled = true
           }
           // now create pendingRound
-          const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore }))
-          currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now() }
+          const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore, autoFilled: !!p._autoFilled }))
+          const readyIds = currentGame.players.filter(p => typeof p._autoFilled !== 'undefined' && p._autoFilled === false).map(p => p.id)
+          currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: readyIds }
         }
       }
 
@@ -306,23 +332,10 @@ export function createApp() {
         if (currentGame.players.length === 0) {
           currentGame = null
         }
-        broadcastGameUpdate()
-        return res.json({ message: 'Left game; game ended due to insufficient players' })
       }
 
       broadcastGameUpdate()
       res.json({ message: 'Left game' })
-    })
-
-    // all api prefixed reqests to 404 route handler
-    app.use('/api', (req, res) => {
-        res.status(404).json({error: 'API route not found'})
-    })
-
-
-    // Fallback to SPA index for all other routes
-    app.use((req, res) => {
-        res.sendFile(path.join(__dirname, 'dist', 'index.html'))
     })
 
     return app
