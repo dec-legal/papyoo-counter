@@ -3,6 +3,7 @@ import {fileURLToPath} from 'url'
 import express from 'express'
 import cors from 'cors'
 import {getPlayersCollection, getGameHistoryCollection} from './db.js'
+import { ObjectId } from 'mongodb'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -152,15 +153,59 @@ export function createApp() {
 
         // Get player usernames
         const playerIds = stats.map(s => s.userId)
-        const players = await playersCollection.find({ id: { $in: playerIds } }).toArray()
+        // Try to match documents where `id` field equals userId OR where `_id` equals an ObjectId representation
+        const possibleObjectIds = []
+        const possibleNumericIds = []
+        for (const id of playerIds) {
+          if (typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id)) {
+            try { possibleObjectIds.push(new ObjectId(id)) } catch (e) { /* ignore invalid */ }
+          }
+          // also consider purely numeric ids stored as Number in DB
+          if (typeof id === 'string' && /^-?\d+$/.test(id)) {
+            possibleNumericIds.push(Number(id))
+          }
+        }
+
+        const queryOr = []
+        if (playerIds.length > 0) queryOr.push({ id: { $in: playerIds } })
+        if (possibleNumericIds.length > 0) queryOr.push({ id: { $in: possibleNumericIds } })
+        if (possibleObjectIds.length > 0) queryOr.push({ _id: { $in: possibleObjectIds } })
+
+        const players = queryOr.length > 0
+          ? await playersCollection.find({ $or: queryOr }).toArray()
+          : []
+
+        // Build map supporting both `id` and `_id` keys
         const playerMap = players.reduce((acc, p) => {
-          acc[p.id] = p.username
+          if (typeof p.id !== 'undefined') acc[String(p.id)] = p.username
+          if (p._id) acc[String(p._id)] = p.username
           return acc
         }, {})
 
+        // Fallback: if some userIds were not found in `players`, try to get a username from game_history
+        const missingIds = playerIds.filter(pid => !playerMap[String(pid)] && !playerMap[pid])
+        if (missingIds.length > 0) {
+          try {
+            const historyNames = await historyCollection.aggregate([
+              { $unwind: '$scores' },
+              { $match: { 'scores.userId': { $in: missingIds } } },
+              { $group: { _id: '$scores.userId', username: { $first: '$scores.username' } } }
+            ]).toArray()
+
+            for (const h of historyNames) {
+              if (h && typeof h._id !== 'undefined' && h.username) {
+                playerMap[String(h._id)] = h.username
+              }
+            }
+          } catch (e) {
+            // If history lookup fails, ignore and fall back to Unknown Player
+            console.warn('Failed to lookup usernames in history fallback', e)
+          }
+        }
+
         const leaderboard = stats.map(s => ({
           ...s,
-          username: playerMap[s.userId] || 'Unknown Player'
+          username: playerMap[String(s.userId)] || playerMap[s.userId] || 'Unknown Player'
         })).sort((a, b) => a.avgScore - b.avgScore) // Sort by lowest average score
 
         res.json(leaderboard)
@@ -372,33 +417,33 @@ export function createApp() {
           const readyIds = currentGame.players.filter(p => typeof p._autoFilled !== 'undefined' && p._autoFilled === false).map(p => p.id)
           currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: readyIds }
 
-          // finalize immediately if all manual
+          // finalize immédiatement si tout est manuel
           if (readyIds.length === currentGame.players.length) {
             finalizePendingRound()
             broadcastGameUpdate()
-            // If no players left after finalize, clear game
+            // Si plus aucun joueur après la finalisation, vider le jeu
             if (!currentGame) return res.json({ message: 'Left game; game ended' })
           }
         } else if (submittedCount === currentGame.players.length - 1 && currentGame.players.length > 0) {
-          // If only one left without submission, autor-fill
+          // Si un seul reste sans soumission, autoriser le remplissage
           const totalSubmitted = currentGame.players.reduce((acc, p) => acc + (typeof p.submittedScore === 'number' ? p.submittedScore : 0), 0)
           const remaining = currentGame.players.find(p => typeof p.submittedScore !== 'number')
           if (remaining) {
             remaining.submittedScore = 250 - totalSubmitted
             remaining._autoFilled = true
           }
-          // now create pendingRound
+          // maintenant créer pendingRound
           const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore, autoFilled: !!p._autoFilled }))
           const readyIds = currentGame.players.filter(p => typeof p._autoFilled !== 'undefined' && p._autoFilled === false).map(p => p.id)
           currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: readyIds }
         }
       }
 
-      // If less than 2 players remain, end the game
+      // Si moins de 2 joueurs restent, terminer le jeu
       if (currentGame.players.length < 2) {
-        // mark ended and clear game
+        // marquer comme terminé et vider le jeu
         currentGame.status = 'ended'
-        // If no players left, clear the singleton so a fresh game can be created
+        // Si aucun joueur restant, vider le singleton pour qu'un nouveau jeu puisse être créé
         if (currentGame.players.length === 0) {
           currentGame = null
         }
