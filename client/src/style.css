@@ -42,7 +42,8 @@ h1 {
   line-height: 1.1;
 }
 
-button:not(.no-style) {
+button:not(.no-style), a.btn-main, a.btn-secondary {
+  text-align: center;
   border-radius: 50px;
   border: 2px solid #0a0a0a;
   padding: 0.5em 1.2em;
@@ -81,6 +82,18 @@ button:focus-visible {
 button.no-style {
   all: unset;
   cursor: pointer;
+}
+
+button.btn-danger {
+  background-color: #ef4444;
+  color: white;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+  border: none;
+  cursor: pointer;
+}
+button.btn-danger:hover {
+  background-color: #dc2626;
 }
 
 input {

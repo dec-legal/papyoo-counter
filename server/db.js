@@ -47,6 +47,10 @@ export function getPlayersCollection() {
   return getDb().collection('players')
 }
 
+export function getGameHistoryCollection() {
+  return getDb().collection('game_history')
+}
+
 export async function closeDatabase() {
   if (client) {
     await client.close()

@@ -2,10 +2,82 @@ import path from 'path'
 import {fileURLToPath} from 'url'
 import express from 'express'
 import cors from 'cors'
-import {getPlayersCollection} from './db.js'
+import {getPlayersCollection, getGameHistoryCollection} from './db.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// In-memory single game instance
+let currentGame = null
+let broadcaster = null // function to notify websocket clients
+
+function broadcastGameUpdate() {
+  if (typeof broadcaster === 'function') {
+    try {
+      broadcaster({ type: 'game:update', payload: { timestamp: Date.now() } })
+    } catch (e) {
+      // ignore broadcaster errors
+    }
+  }
+}
+
+export function registerBroadcaster(fn) {
+  broadcaster = fn
+}
+
+function createEmptyGame(creator) {
+  return {
+    id: 'singleton',
+    createdAt: Date.now(),
+    creator: creator ?? null,
+    players: [], // { id, username, totalScore, submittedScore (for current round) }
+    rounds: [], // array of round objects { roundNumber, scores: [{id, score}], autoFilled: boolean }
+    pendingRound: null, // snapshot when all players have submitted but before NEXT
+    currentRound: 1,
+    joiningOpen: true, // players can join until first score is submitted
+    status: 'running', // 'running' | 'ended'
+  }
+}
+
+async function finalizePendingRound() {
+  if (!currentGame || !currentGame.pendingRound) return
+
+  // Apply submitted scores to totals and push the round
+  currentGame.players.forEach(p => {
+    p.totalScore = (p.totalScore || 0) + (typeof p.submittedScore === 'number' ? p.submittedScore : 0)
+  })
+  currentGame.rounds.push(currentGame.pendingRound)
+
+  // Save round to history
+  try {
+    const historyCollection = getGameHistoryCollection()
+    const roundData = {
+      gameId: currentGame.id,
+      roundNumber: currentGame.currentRound,
+      scores: currentGame.pendingRound.scores.map(s => ({ userId: s.id, username: s.username, score: s.score })),
+      finalizedAt: new Date()
+    }
+    await historyCollection.insertOne(roundData)
+  } catch (e) {
+    console.error('Failed to save round to history', e)
+  }
+
+
+  // Clear pending and reset submittedScore for next round
+  currentGame.pendingRound = null
+  currentGame.players.forEach(p => {
+    p.submittedScore = null
+    delete p._autoFilled
+    delete p.previousScore
+  })
+
+  currentGame.currentRound += 1
+
+  // After the first round is finalized, close joining permanently until game ends
+  if (currentGame.rounds.length >= 1) {
+    currentGame.joiningOpen = false
+  }
+}
 
 export function createApp() {
     const app = express()
@@ -25,96 +97,316 @@ export function createApp() {
         res.json({message: 'Hello from Express!'})
     })
 
-    // --- Players CRD ---
-    // Create player
-    app.post('/api/players', async (req, res) => {
-        try {
-            const {id, username} = req.body || {}
-            if (!id || typeof id !== 'string' || !username || typeof username !== 'string') {
-                return res.status(400).json({error: 'Invalid payload. Expecting { id: string, username: string }'})
+    // Game routes
+    // Get game state for a user (userId = -1 for public home view)
+    app.get('/api/game/:userId', (req, res) => {
+      if (!currentGame) return res.json({ game: null })
+
+      // For user-specific view we can annotate submitted status
+      const players = currentGame.players.map(p => ({
+        id: p.id,
+        username: p.username,
+        totalScore: p.totalScore || 0,
+        submittedScore: typeof p.submittedScore === 'number' ? p.submittedScore : null,
+        previousScore: typeof p.previousScore === 'number' ? p.previousScore : null
+      }))
+
+      const response = {
+        id: currentGame.id,
+        createdAt: currentGame.createdAt,
+        creator: currentGame.creator,
+        players,
+        currentRound: currentGame.currentRound,
+        joiningOpen: currentGame.joiningOpen,
+        status: currentGame.status,
+        pendingRound: currentGame.pendingRound,
+        rounds: currentGame.rounds
+      }
+
+      res.json(response)
+    })
+
+    app.get('/api/leaderboard', async (req, res) => {
+      try {
+        const historyCollection = getGameHistoryCollection()
+        const playersCollection = getPlayersCollection()
+
+        const stats = await historyCollection.aggregate([
+          { $unwind: '$scores' },
+          {
+            $group: {
+              _id: '$scores.userId',
+              totalScore: { $sum: '$scores.score' },
+              roundsPlayed: { $sum: 1 }
             }
-            const col = getPlayersCollection()
-            await col.insertOne({_id: id, username, playing: true})
-            return res.status(201).json({id, username})
-        } catch (err) {
-            if (err && err.code === 11000) {
-                return res.status(409).json({error: 'Player with this id already exists'})
+          },
+          {
+            $project: {
+              userId: '$_id',
+              avgScore: { $divide: ['$totalScore', '$roundsPlayed'] },
+              gamesPlayed: '$roundsPlayed', // Assuming one round is one "game" for this stat
+              _id: 0
             }
-            console.error('POST /api/players error:', err)
-            return res.status(500).json({error: 'Internal Server Error'})
-        }
+          }
+        ]).toArray()
+
+        // Get player usernames
+        const playerIds = stats.map(s => s.userId)
+        const players = await playersCollection.find({ id: { $in: playerIds } }).toArray()
+        const playerMap = players.reduce((acc, p) => {
+          acc[p.id] = p.username
+          return acc
+        }, {})
+
+        const leaderboard = stats.map(s => ({
+          ...s,
+          username: playerMap[s.userId] || 'Unknown Player'
+        })).sort((a, b) => a.avgScore - b.avgScore) // Sort by lowest average score
+
+        res.json(leaderboard)
+      } catch (e) {
+        console.error('Failed to get leaderboard', e)
+        res.status(500).json({ error: 'Failed to retrieve leaderboard data' })
+      }
     })
 
-    // Read all players
-    app.get('/api/players', async (req, res) => {
-        try {
-            const col = getPlayersCollection()
-            // get only players who are currently playing
-            const docs = await col.find({playing: true}).toArray()
-            const players = docs.map(d => ({id: d._id, username: d.username}))
-            return res.json(players)
-        } catch (err) {
-            console.error('GET /api/players error:', err)
-            return res.status(500).json({error: 'Internal Server Error'})
-        }
+    // Start a game (called by first player)
+    app.post('/api/game/start', (req, res) => {
+      const { userId, username } = req.body || {}
+      if (!userId || !username) return res.status(400).json({ error: 'userId and username required' })
+      if (currentGame && currentGame.status === 'running') {
+        return res.status(409).json({ error: 'Game already running' })
+      }
+
+      currentGame = createEmptyGame(userId)
+      currentGame.creator = { id: userId, username }
+      currentGame.players.push({ id: userId, username, totalScore: 0, submittedScore: null })
+      currentGame.joiningOpen = true
+
+      broadcastGameUpdate()
+      res.status(201).json({ message: 'Game started', gameId: currentGame.id })
     })
 
-    // Read one player by id
-    app.get('/api/players/:id', async (req, res) => {
-        try {
-            const col = getPlayersCollection()
-            const doc = await col.findOne({_id: req.params.id})
-            if (!doc) return res.status(404).json({error: 'Not found'})
-            return res.json({id: doc._id, username: doc.username})
-        } catch (err) {
-            console.error('GET /api/players/:id error:', err)
-            return res.status(500).json({error: 'Internal Server Error'})
-        }
+    // Join existing game
+    app.post('/api/game/join', (req, res) => {
+      const { userId, username } = req.body || {}
+      if (!userId || !username) return res.status(400).json({ error: 'userId and username required' })
+      if (!currentGame || currentGame.status !== 'running') return res.status(404).json({ error: 'No active game' })
+      if (!currentGame.joiningOpen) return res.status(400).json({ error: 'Joining closed' })
+      if (currentGame.players.some(p => p.id === userId)) return res.status(409).json({ error: 'Already joined' })
+
+      currentGame.players.push({ id: userId, username, totalScore: 0, submittedScore: null })
+
+      broadcastGameUpdate()
+      res.status(201).json({ message: 'Joined', player: { id: userId, username } })
     })
 
-    // Delete player by id
-    app.delete('/api/players/:id', async (req, res) => {
-        try {
-            const col = getPlayersCollection()
-            // set playing to false instead of deleting
-            await col.findOneAndUpdate({_id: req.params.id}, {$set: {playing: false}})
-            return res.status(204).end()
-        } catch (err) {
-            console.error('DELETE /api/players/:id error:', err)
-            return res.status(500).json({error: 'Internal Server Error'})
+    // Enter score for current round
+    app.post('/api/game/score', (req, res) => {
+      const { userId, score } = req.body || {}
+      if (typeof userId === 'undefined' || typeof score === 'undefined') return res.status(400).json({ error: 'userId and score required' })
+      if (!currentGame || currentGame.status !== 'running') return res.status(404).json({ error: 'No active game' })
+
+      const player = currentGame.players.find(p => p.id === userId)
+      if (!player) return res.status(404).json({ error: 'Player not in game' })
+
+      // Do NOT close joining on first submission; joining stays open until first round finalized
+
+      player.submittedScore = Number(score)
+      // Mark this as a manual submission (not auto-filled)
+      player._autoFilled = false
+      delete player.previousScore // Clean up previous score on new submission
+
+      // Count how many submitted (manual submissions so far)
+      const manualSubmittedIds = currentGame.players.filter(p => typeof p.submittedScore === 'number').map(p => p.id)
+      const submittedCount = manualSubmittedIds.length
+
+      // If only one player left without submission, auto-fill to sum 250
+      if (submittedCount === currentGame.players.length - 1) {
+        const totalSubmitted = currentGame.players.reduce((acc, p) => acc + (typeof p.submittedScore === 'number' ? p.submittedScore : 0), 0)
+        const remaining = currentGame.players.find(p => typeof p.submittedScore !== 'number')
+        if (remaining) {
+          remaining.submittedScore = 250 - totalSubmitted
+          remaining._autoFilled = true
         }
+      }
+
+      // Recompute submittedCount after potential auto-fill
+      const nowSubmittedCount = currentGame.players.filter(p => typeof p.submittedScore === 'number').length
+
+      // If all players have submitted, create a pendingRound snapshot that clients can review before NEXT
+      if (nowSubmittedCount === currentGame.players.length) {
+        // Build roundScores including autoFilled flag
+        const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore, autoFilled: !!p._autoFilled }))
+
+        // Initialize ready list with IDs of players who submitted manually.
+        // The auto-filled player will not be in this list and devra valider.
+        const readyIds = currentGame.players
+          .filter(p => !p._autoFilled)
+          .map(p => p.id)
+
+        currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: readyIds }
+
+        // If everyone had submitted manually (no auto-filled player), finalize immediately
+        if (readyIds.length === currentGame.players.length) {
+          finalizePendingRound()
+          broadcastGameUpdate()
+          return res.json({ message: 'Score recorded and round finalized (all submitted manually)' })
+        }
+      }
+
+      broadcastGameUpdate()
+      res.json({ message: 'Score recorded' })
     })
 
-    // Enable by id (not in original CRD, but useful)
-    app.post('/api/players/:id/enable', async (req, res) => {
-        try {
-            const col = getPlayersCollection()
-            await col.findOneAndUpdate({_id: req.params.id}, {$set: {playing: true}})
-            return res.status(200).end()
-        } catch (err) {
-            console.error('POST /api/players/:id/enable error:', err)
-        }
+    // Player ready to finalize current pending round
+    app.post('/api/game/ready', (req, res) => {
+      const { userId } = req.body || {}
+      if (!userId) return res.status(400).json({ error: 'userId required' })
+      if (!currentGame || currentGame.status !== 'running') return res.status(404).json({ error: 'No active game' })
+      if (!currentGame.pendingRound) return res.status(400).json({ error: 'No pending round' })
+
+      const player = currentGame.players.find(p => p.id === userId)
+      if (!player) return res.status(404).json({ error: 'Player not in game' })
+
+      // Add to ready list if not already
+      if (!currentGame.pendingRound.ready.includes(userId)) {
+        currentGame.pendingRound.ready.push(userId)
+      }
+
+      // If all current players are ready, finalize
+      const allReady = currentGame.players.length > 0 && currentGame.pendingRound.ready.length === currentGame.players.length
+      if (allReady) {
+        finalizePendingRound()
+        // Add a small delay to prevent race conditions on the client
+        setTimeout(() => broadcastGameUpdate(), 100)
+        return res.json({ message: 'All ready — round finalized' })
+      }
+
+      broadcastGameUpdate()
+      res.json({ message: 'Marked ready' })
     })
 
-    // Autocomplete player based on existing usernames
-    app.get('/api/players/autocomplete/:query', async (req, res) => {
-        try {
-            const query = req.params.query
-            const col = getPlayersCollection()
-            const docs = await col.find({username: {$regex: `^${query}`, $options: 'i'}, playing: false}).limit(10).toArray();
-            const players = docs.map(d => ({id: d._id, username: d.username}))
-            return res.json(players)
-        } catch (err) {
-            console.error('GET /api/players/autocomplete/:query error:', err)
-            return res.status(500).json({error: 'Internal Server Error'})
-        }
+    // Player rejects an auto-filled score
+    app.post('/api/game/reject', (req, res) => {
+      const { userId } = req.body || {}
+      if (!userId) return res.status(400).json({ error: 'userId required' })
+      if (!currentGame || !currentGame.pendingRound) return res.status(400).json({ error: 'No pending round to reject' })
+
+      const playerInGame = currentGame.players.find(p => p.id === userId)
+      if (!playerInGame) return res.status(404).json({ error: 'Player not in game' })
+
+      const scoreInPendingRound = currentGame.pendingRound.scores.find(s => s.id === userId)
+      if (!scoreInPendingRound || !scoreInPendingRound.autoFilled) {
+        return res.status(403).json({ error: 'Only the player with an auto-filled score can reject' })
+      }
+
+      // Rejection logic: clear the pending round, and reset all submitted scores for the current round
+      // We keep the submitted scores in a temporary property to pre-fill inputs on the client
+      currentGame.players.forEach(p => {
+        p.previousScore = p.submittedScore
+        p.submittedScore = null
+        delete p._autoFilled
+      })
+
+      // The player who rejected should not have a pre-filled input
+      const rejectingPlayer = currentGame.players.find(p => p.id === userId)
+      if (rejectingPlayer) {
+        rejectingPlayer.previousScore = null
+      }
+
+      currentGame.pendingRound = null
+
+      broadcastGameUpdate()
+      res.json({ message: 'Round rejected. All players must re-submit their scores.' })
     })
 
-    // Fallback to SPA index for all other routes
-    app.use((req, res) => {
-        res.sendFile(path.join(__dirname, 'dist', 'index.html'))
+    // Next round (admin/manual finalize)
+    app.post('/api/game/next', (req, res) => {
+      if (!currentGame || currentGame.status !== 'running') return res.status(404).json({ error: 'No active game' })
+
+      if (!currentGame.pendingRound) {
+        return res.status(400).json({ error: 'No pending round to finalize' })
+      }
+
+      finalizePendingRound()
+
+      // Note: joining remains closed after first round finalized
+      broadcastGameUpdate()
+      res.json({ message: 'Advanced to next round', currentRound: currentGame.currentRound })
+    })
+
+    // End game
+    app.post('/api/game/end', (req, res) => {
+      if (!currentGame) return res.status(404).json({ error: 'No active game' })
+      currentGame.status = 'ended'
+      broadcastGameUpdate()
+      res.json({ message: 'Game ended' })
+    })
+
+    // Leave game
+    app.post('/api/game/leave', (req, res) => {
+      const { userId } = req.body || {}
+      if (!userId) return res.status(400).json({ error: 'userId required' })
+      if (!currentGame || currentGame.status !== 'running') return res.status(404).json({ error: 'No active game' })
+
+      const idx = currentGame.players.findIndex(p => p.id === userId)
+      if (idx === -1) return res.status(404).json({ error: 'Player not in game' })
+
+      // If a pendingRound exists, remove the player from it
+      if (currentGame.pendingRound) {
+        currentGame.pendingRound.scores = currentGame.pendingRound.scores.filter(s => s.id !== userId)
+        currentGame.pendingRound.ready = (currentGame.pendingRound.ready || []).filter(id => id !== userId)
+      }
+
+      // Remove player
+      currentGame.players.splice(idx, 1)
+
+      // If players had submitted for current round (submittedScore set), re-evaluate whether a pendingRound should be created
+      const manualSubmittedIds = currentGame.players.filter(p => typeof p.submittedScore === 'number').map(p => p.id)
+      const submittedCount = manualSubmittedIds.length
+      if (!currentGame.pendingRound) {
+        // If after removal, everyone left has submitted, create pendingRound
+        if (currentGame.players.length > 0 && submittedCount === currentGame.players.length) {
+          const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore, autoFilled: !!p._autoFilled }))
+          const readyIds = currentGame.players.filter(p => typeof p._autoFilled !== 'undefined' && p._autoFilled === false).map(p => p.id)
+          currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: readyIds }
+
+          // finalize immediately if all manual
+          if (readyIds.length === currentGame.players.length) {
+            finalizePendingRound()
+            broadcastGameUpdate()
+            // If no players left after finalize, clear game
+            if (!currentGame) return res.json({ message: 'Left game; game ended' })
+          }
+        } else if (submittedCount === currentGame.players.length - 1 && currentGame.players.length > 0) {
+          // If only one left without submission, autor-fill
+          const totalSubmitted = currentGame.players.reduce((acc, p) => acc + (typeof p.submittedScore === 'number' ? p.submittedScore : 0), 0)
+          const remaining = currentGame.players.find(p => typeof p.submittedScore !== 'number')
+          if (remaining) {
+            remaining.submittedScore = 250 - totalSubmitted
+            remaining._autoFilled = true
+          }
+          // now create pendingRound
+          const roundScores = currentGame.players.map(p => ({ id: p.id, username: p.username, score: p.submittedScore, autoFilled: !!p._autoFilled }))
+          const readyIds = currentGame.players.filter(p => typeof p._autoFilled !== 'undefined' && p._autoFilled === false).map(p => p.id)
+          currentGame.pendingRound = { roundNumber: currentGame.currentRound, scores: roundScores, createdAt: Date.now(), ready: readyIds }
+        }
+      }
+
+      // If less than 2 players remain, end the game
+      if (currentGame.players.length < 2) {
+        // mark ended and clear game
+        currentGame.status = 'ended'
+        // If no players left, clear the singleton so a fresh game can be created
+        if (currentGame.players.length === 0) {
+          currentGame = null
+        }
+      }
+
+      broadcastGameUpdate()
+      res.json({ message: 'Left game' })
     })
 
     return app
 }
-

@@ -16,6 +16,13 @@ export default defineConfig({
                 target: 'http://0.0.0.0:3000',
                 changeOrigin: true,
                 secure: false
+            },
+            // Proxy websocket connections to backend during development
+            '/ws': {
+                target: 'ws://0.0.0.0:3000',
+                ws: true,
+                changeOrigin: true,
+                secure: false
             }
         }
     },
