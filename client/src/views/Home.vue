@@ -3,10 +3,11 @@ import GameService from "../service/GameService.js";
 import PlayerList from '../components/PlayerList.vue'
 import ScoreInput from '../components/ScoreInput.vue'
 import PendingRoundReview from '../components/PendingRoundReview.vue'
+import RoundsAccordion from '../components/RoundsAccordion.vue'
 
 export default {
   name: 'Home',
-  components: {PlayerList, ScoreInput, PendingRoundReview},
+  components: {PlayerList, ScoreInput, PendingRoundReview, RoundsAccordion},
   data() {
     return {
       username: null,
@@ -231,7 +232,7 @@ export default {
 </script>
 
 <template>
-  <div class="grow w-full flex flex-col justify-center gap-2">
+  <div class="grow w-full flex flex-col justify-center gap-2 overflow-hidden">
     <template v-if="!playerInGame">
       <h3 class="mt-5 font-[jaro] text-lg w-full">Qui joue ?</h3>
       <input type="text" v-model="username"
@@ -243,19 +244,19 @@ export default {
       </button>
     </template>
 
-    <div v-if="gameDto && playerInGame" class="mt-4 bg-white p-3 rounded-xl shadow w-full">
-      <div class="flex justify-between items-center mb-2">
+    <div v-if="gameDto && playerInGame" class="bg-white p-3 gap-3 rounded-xl shadow w-full grow overflow-y-hidden flex flex-col">
+      <div class="flex justify-between items-center">
         <strong>Partie {{gameDto.status === 'running' ? 'en cours' : 'terminée'}} (tour {{ gameDto.currentRound }})</strong>
       </div>
-
       <!-- Player list component -->
-      <div class="mb-3">
-        <PlayerList :players="gameDto.players" :userId="userId" :pending="gameDto.pendingRound"/>
-      </div>
-      <div v-if="!isGameRunning">
+      <PlayerList :players="gameDto.players" :userId="userId" :pending="gameDto.pendingRound"/>
+      <!-- Rounds accordion showing previous rounds -->
+      <RoundsAccordion :rounds="gameDto.rounds" :players="gameDto.players" :userId="userId" />
+
+      <template v-if="!isGameRunning">
         <div class="text-sm mt-2">Partie terminée</div>
-      </div>
-      <div v-else-if="playerInGame">
+      </template>
+      <template v-else-if="playerInGame">
         <!-- Score input or pending review are handled by components -->
         <div v-if="!gameDto.pendingRound && hasEnoughPlayers">
           <ScoreInput :initial="scoreInput" @submit="submitScore" @invalid="onInvalidScore"/>
@@ -269,7 +270,7 @@ export default {
         <div v-else>
           <div class="text-sm mt-2">En attente de plus de joueurs pour commencer la partie...</div>
         </div>
-      </div>
+      </template>
 
       <div v-else class="text-sm mt-2">Vous n'êtes pas encore dans cette partie.</div>
     </div>
@@ -295,4 +296,3 @@ button {
 }
 
 </style>
-

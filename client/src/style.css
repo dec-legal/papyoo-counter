@@ -98,10 +98,10 @@ button.btn-danger:hover {
 
 input {
     font: inherit;
-    padding: 0.5em;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    background-color: #fefefe;
+    padding: 7px 14px;
+    border: 2px solid #4b9ace;
+    background-color: rgba(113, 171, 204, 0.13);
+    border-radius: 50px;
 }
 
 .card {

@@ -1,7 +1,9 @@
 <template>
   <div id="app">
-    <main class="w-full flex flex-col items-center px-8 pt-5 gap-2 h-full max-w-[600px] mx-auto h-screen">
-      <img src="@assets/tallLogo.png" alt="" width="300">
+    <main class="w-full flex flex-col items-center p-4 gap-2 h-full max-w-[600px] mx-auto max-h-dvh h-dvh overflow-hidden">
+      <router-link to="/">
+        <img src="@assets/tallLogo.png" alt="" width="200">
+      </router-link>
       <router-view/>
     </main>
   </div>
@@ -9,6 +11,6 @@
 
 <script>
 export default {
-  name: 'App'
+  name: 'App',
 }
 </script>

@@ -1,8 +1,8 @@
 <template>
-  <div class="border-1 rounded-md overflow-hidden border-gray-300 shadow-sm">
+  <div class="border-1 rounded-md overflow-hidden border-gray-300 shadow-sm overflow-y-auto">
     <table class="w-full text-left">
       <thead>
-      <tr class="border-b bg-gray-100 border-gray-300 ">
+      <tr class="border-b bg-gray-100 border-gray-300 sticky top-0">
         <th class="py-2 px-2">Joueur</th>
         <th v-if="showLastColumn" class="py-2 px-2">Score</th>
         <th class="py-2 px-2">Total</th>
