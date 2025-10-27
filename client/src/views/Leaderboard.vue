@@ -15,7 +15,13 @@
           </thead>
           <tbody>
           <tr v-for="(player, index) in leaderboard" :key="player.userId" class="hover:bg-gray-50 not-last:border-b border-gray-200" :class="{'font-bold' : isCurrentPlayer(player)}">
-            <td class="p-2">{{ index + 1 + ". " + player.username }}</td>
+            <td class="p-2">
+              <router-link
+                  :to="{ name: 'PlayerStats', params: { userId: player.userId } }"
+                  class="text-black!"
+              >
+                {{ index + 1 + ". " + player.username }}
+              </router-link></td>
             <td class="p-2 text-right">{{ formatPerf(player.avgPerformance) }}</td>
             <td class="p-2 text-right">{{ player.gamesPlayed }}</td>
           </tr>
@@ -27,7 +33,6 @@
     <div v-else-if="!loading" class="text-center text-gray-500 mt-4">
       Aucune donnée de classement disponible.
     </div>
-    <router-link to="/" class="btn-secondary mt-4 inline-block">Retour à l'accueil</router-link>
   </div>
 </template>
 

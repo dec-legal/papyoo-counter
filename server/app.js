@@ -230,6 +230,90 @@ export function createApp() {
       }
     })
 
+    // New endpoint: per-player stats
+    app.get('/api/player/:userId/stats', async (req, res) => {
+      try {
+        const { userId } = req.params
+        const historyCollection = getGameHistoryCollection()
+
+        const pipeline = [
+          // keep original scores array so we can compute ranks
+          { $addFields: { numPlayers: { $size: '$scores' }, allScores: '$scores' } },
+          { $unwind: '$scores' },
+          // keep only this player's score entries
+          { $match: { 'scores.userId': userId } },
+          // project needed fields and compute per-round performance and rank
+          {
+            $project: {
+              userId: '$scores.userId',
+              username: '$scores.username',
+              score: '$scores.score',
+              numPlayers: '$numPlayers',
+              roundNumber: '$roundNumber',
+              finalizedAt: 1,
+              performance: {
+                $subtract: [1, { $divide: [{ $multiply: ['$scores.score', '$numPlayers'] }, 250] }]
+              },
+              // rank = 1 + count of players with strictly lower score (lower is better)
+              rank: {
+                $add: [
+                  1,
+                  { $size: { $filter: { input: '$allScores', as: 'o', cond: { $lt: ['$$o.score', '$scores.score'] } } } }
+                ]
+              }
+            }
+          },
+          // sort by most recent rounds
+          { $sort: { finalizedAt: -1 } },
+          // aggregate per-player stats
+          {
+            $group: {
+              _id: '$userId',
+              username: { $first: '$username' },
+              roundsPlayed: { $sum: 1 },
+              avgPerformance: { $avg: '$performance' },
+              avgScore: { $avg: '$score' },
+              zeros: { $sum: { $cond: [{ $eq: ['$score', 0] }, 1, 0] } },
+              fulls: { $sum: { $cond: [{ $eq: ['$score', 250] }, 1, 0] } },
+              bestPerformance: { $max: '$performance' },
+              worstPerformance: { $min: '$performance' },
+              top1: { $sum: { $cond: [{ $eq: ['$rank', 1] }, 1, 0] } },
+              top3: { $sum: { $cond: [{ $lte: ['$rank', 3] }, 1, 0] } },
+              recentRounds: { $push: { roundNumber: '$roundNumber', score: '$score', numPlayers: '$numPlayers', performance: '$performance', rank: '$rank', finalizedAt: '$finalizedAt' } }
+            }
+          },
+          // limit recent rounds to last 20 and compute percentages
+          {
+            $project: {
+              username: 1,
+              roundsPlayed: 1,
+              avgPerformance: 1,
+              avgScore: 1,
+              zeros: 1,
+              fulls: 1,
+              bestPerformance: 1,
+              worstPerformance: 1,
+              top1: 1,
+              top3: 1,
+              percentTop1: { $cond: [{ $gt: ['$roundsPlayed', 0] }, { $multiply: [{ $divide: ['$top1', '$roundsPlayed'] }, 100] }, 0] },
+              percentTop3: { $cond: [{ $gt: ['$roundsPlayed', 0] }, { $multiply: [{ $divide: ['$top3', '$roundsPlayed'] }, 100] }, 0] },
+              recentRounds: { $slice: ['$recentRounds', 20] }
+            }
+          }
+        ]
+
+        const result = await historyCollection.aggregate(pipeline).toArray()
+        if (!result || result.length === 0) {
+          return res.status(404).json({ error: 'No data for this player' })
+        }
+
+        res.json(result[0])
+      } catch (e) {
+        console.error('Failed to get player stats', e)
+        res.status(500).json({ error: 'Failed to retrieve player stats' })
+      }
+    })
+
     // Start a game (called by first player)
     app.post('/api/game/start', (req, res) => {
       const { userId, username } = req.body || {}
