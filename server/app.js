@@ -28,7 +28,7 @@ export function registerBroadcaster(fn) {
 
 function createEmptyGame(creator) {
   return {
-    id: 'singleton',
+    id: new ObjectId().toString(),
     createdAt: Date.now(),
     creator: creator ?? null,
     players: [], // { id, username, totalScore, submittedScore (for current round) }
@@ -236,12 +236,13 @@ export function createApp() {
         const { userId } = req.params
         const historyCollection = getGameHistoryCollection()
 
+        // use $toString to compare userId irrespective of stored type (string/number/ObjectId)
         const pipeline = [
           // keep original scores array so we can compute ranks
           { $addFields: { numPlayers: { $size: '$scores' }, allScores: '$scores' } },
           { $unwind: '$scores' },
-          // keep only this player's score entries
-          { $match: { 'scores.userId': userId } },
+          // keep only this player's score entries (compare stringified ids)
+          { $match: { $expr: { $eq: [ { $toString: '$scores.userId' }, userId ] } } },
           // project needed fields and compute per-round performance and rank
           {
             $project: {
@@ -251,6 +252,7 @@ export function createApp() {
               numPlayers: '$numPlayers',
               roundNumber: '$roundNumber',
               finalizedAt: 1,
+              gameId: 1,
               performance: {
                 $subtract: [1, { $divide: [{ $multiply: ['$scores.score', '$numPlayers'] }, 250] }]
               },
@@ -271,6 +273,7 @@ export function createApp() {
               _id: '$userId',
               username: { $first: '$username' },
               roundsPlayed: { $sum: 1 },
+              gamesSet: { $addToSet: '$gameId' },
               avgPerformance: { $avg: '$performance' },
               avgScore: { $avg: '$score' },
               zeros: { $sum: { $cond: [{ $eq: ['$score', 0] }, 1, 0] } },
@@ -279,7 +282,7 @@ export function createApp() {
               worstPerformance: { $min: '$performance' },
               top1: { $sum: { $cond: [{ $eq: ['$rank', 1] }, 1, 0] } },
               top3: { $sum: { $cond: [{ $lte: ['$rank', 3] }, 1, 0] } },
-              recentRounds: { $push: { roundNumber: '$roundNumber', score: '$score', numPlayers: '$numPlayers', performance: '$performance', rank: '$rank', finalizedAt: '$finalizedAt' } }
+              recentRounds: { $push: { roundNumber: '$roundNumber', score: '$score', numPlayers: '$numPlayers', performance: '$performance', rank: '$rank', finalizedAt: '$finalizedAt', gameId: '$gameId' } }
             }
           },
           // limit recent rounds to last 20 and compute percentages
@@ -287,6 +290,7 @@ export function createApp() {
             $project: {
               username: 1,
               roundsPlayed: 1,
+              gamesPlayed: { $size: '$gamesSet' },
               avgPerformance: 1,
               avgScore: 1,
               zeros: 1,
