@@ -281,7 +281,7 @@ export default {
     </div>
     <template v-if="playerInGame">
       <button v-if="isGameRunning" @click="leaveGame" class="btn-secondary w-full mt-2">Quitter la partie <i
-          class="fa fa-person-through-window ml-2"/></button>
+          class="fa fa-person-through-window ml-2 mt-1"/></button>
       <button v-else @click="leaveGameLocal" class="btn-secondary w-full mt-2">Accueil <i class="fa fa-home ml-2"/>
       </button>
     </template>

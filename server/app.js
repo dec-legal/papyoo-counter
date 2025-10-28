@@ -134,7 +134,7 @@ export function createApp() {
 
         // Compute a per-score performance index normalized by number of players in the round:
         // performance = 1 - (score / (250 / numPlayers)) = 1 - (score * numPlayers / 250)
-        // Higher is better. We'll clamp final averages later if needed.
+        // Higher is better. A perfectly average player scores 250/numPlayers each round = 0% performance.
         const stats = await historyCollection.aggregate([
           // compute numPlayers for each round document
           { $addFields: { numPlayers: { $size: '$scores' } } },
@@ -263,9 +263,9 @@ export function createApp() {
                   { $size: { $filter: { input: '$allScores', as: 'o', cond: { $lt: ['$$o.score', '$scores.score'] } } } }
                 ]
               },
-              // Clamp per-round performance to [-1, 1] for extrema computations
+              // Clamp per-round performance to [-1, 1] for extrema computations using the same formula
               performanceClamped: {
-                $max: [ -1, { $min: [ 1, { $subtract: [ 1, { $divide: [ { $multiply: ['$scores.score', 2] }, 250 ] } ] } ] } ]
+                $max: [ -1, { $min: [ 1, { $subtract: [ 1, { $divide: [ { $multiply: ['$scores.score', '$numPlayers'] }, 250 ] } ] } ] } ]
               }
             }
           },
