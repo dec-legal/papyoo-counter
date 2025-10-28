@@ -344,10 +344,23 @@ export function createApp() {
       const { userId, username } = req.body || {}
       if (!userId || !username) return res.status(400).json({ error: 'userId and username required' })
       if (!currentGame || currentGame.status !== 'running') return res.status(404).json({ error: 'No active game' })
-      if (!currentGame.joiningOpen) return res.status(400).json({ error: 'Joining closed' })
       if (currentGame.players.some(p => p.id === userId)) return res.status(409).json({ error: 'Already joined' })
 
-      currentGame.players.push({ id: userId, username, totalScore: 0, submittedScore: null })
+      const hasPlayedBefore = currentGame.rounds.some(round => round.scores.some(score => score.id === userId))
+
+      if (!currentGame.joiningOpen && !hasPlayedBefore) {
+        return res.status(400).json({ error: 'Joining closed for new players' })
+      }
+
+      let totalScore = 0
+      if (hasPlayedBefore) {
+        totalScore = currentGame.rounds.reduce((acc, round) => {
+          const playerScore = round.scores.find(s => s.id === userId)
+          return acc + (playerScore ? playerScore.score : 0)
+        }, 0)
+      }
+
+      currentGame.players.push({ id: userId, username, totalScore, submittedScore: null })
 
       broadcastGameUpdate()
       res.status(201).json({ message: 'Joined', player: { id: userId, username } })
