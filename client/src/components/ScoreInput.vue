@@ -1,7 +1,7 @@
 <template>
-  <div class="flex gap-2 flex-col">
-    <input v-model="localScore" type="number" placeholder="Entrez votre score" class="flex-1" :min="0" :max="250" @keydown.enter="onSubmit" :step="1" onkeypress="return event.charCode >= 48 && event.charCode <= 57"/>
-    <button @click="onSubmit" class="btn-main">Soumettre <i class="fa fa-hand-point-right ml-2"/></button>
+  <div class="flex gap-1 flex-row">
+    <input v-model="localScore" type="number" placeholder="Entrez votre score" class="flex-1 py-3! pl-7! input-elem" :min="0" :max="250" @keydown.enter="onSubmit" :step="1" onkeypress="return event.charCode >= 48 && event.charCode <= 57"/>
+    <button @click="onSubmit" class="btn-main py-3! btn-elem">Soumettre <i class="fa fa-hand-point-right ml-2"/></button>
   </div>
 </template>
 
@@ -31,4 +31,15 @@ export default {
 }
 </script>
 
+<style scoped>
+.input-elem {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
 
+.btn-elem {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+</style>

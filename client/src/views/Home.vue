@@ -230,13 +230,47 @@ export default {
     wsStatus() {
       if (this.wsConnected) return 'Connecté'
       return 'Déconnecté'
+    },
+    dealerInfo() {
+      const roundNum = this.gameDto ? this.gameDto.currentRound : 0
+      const playerCount = this.gameDto && this.gameDto.players ? this.gameDto.players.length : 0
+
+      // afficher "donner à la x eme personne à votre gauche" puis "donner à la personne en face si playerCount % 2" puis "donner à la x eme personne à votre droite"
+      if (playerCount < 2) return null
+
+      // ajouter un tour "garder ses cartes" après avoir donné à tous les joueurs
+      const cycleLen = playerCount + 1
+      const dealerOffset = (roundNum - 1) % cycleLen
+
+      if (dealerOffset === playerCount) {
+        return null; // garder ses cartes
+      }
+
+      if (dealerOffset === 0) {
+        return `à la personne à votre gauche`
+      } else if (playerCount % 2 === 0 && dealerOffset === playerCount / 2) {
+        return `à la personne en face de vous`
+      } else if (dealerOffset < playerCount / 2) {
+        return `à la ${dealerOffset + 1}ème personne à votre gauche`
+      } else {
+        const rightOffset = playerCount - dealerOffset
+        if (rightOffset === 1) {
+          return `à la personne à votre droite`
+        }
+        return `à la ${rightOffset}ème personne à votre droite`
+      }
+    },
+    cardCount(){
+      const cardCountsToGive = [5, 5, 4, 3, 3, 3, 2, 2, 1]
+      const playerCount = this.gameDto && this.gameDto.players ? this.gameDto.players.length : 0
+      return cardCountsToGive[playerCount - 2] || 1
     }
   }
 }
 </script>
 
 <template>
-  <div class="grow w-full flex flex-col justify-center gap-2 overflow-hidden">
+  <div class="grow w-full flex flex-col justify-center gap-2 min-h-0">
     <template v-if="!playerInGame">
       <h3 class="mt-5 font-[jaro] text-lg w-full">Qui joue ?</h3>
       <input type="text" v-model="username"
@@ -247,44 +281,70 @@ export default {
         <i class="fa fa-play-circle ml-2"/>
       </button>
     </template>
+    <div v-if="playerInGame && isGameRunning" class="flex gap-3">
+      <button @click="leaveGame" class="btn-secondary btn-danger grow">Quitter la partie <i
+          class="fa fa-person-through-window ml-2 mt-1"/></button>
+      <router-link to="/leaderboard" class="btn-secondary grow">
+        Leaderboard
+        <i class="fa fa-medal ml-2"/>
+      </router-link>
+    </div>
 
-    <div v-if="gameDto && playerInGame" class="bg-white p-3 gap-3 rounded-xl shadow w-full grow overflow-y-hidden flex flex-col">
-      <div class="flex justify-between items-center">
-        <strong>Partie {{gameDto.status === 'running' ? 'en cours' : 'terminée'}} (tour {{ gameDto.currentRound }})</strong>
-        <span class="flex items-center gap-1.5 text-gray-500 text-xs">{{wsStatus}} <span class="h-1.5 w-1.5 rounded-full inline-block" :class="wsConnected ? 'bg-green-400' : 'bg-red-400'" /></span>
+    <div v-if="gameDto && playerInGame"
+         class="bg-white rounded-xl shadow w-full grow overflow-y-auto flex flex-col flex-1">
+
+      <div class="flex justify-between items-center sticky top-0 bg-white p-3 z-10">
+        <strong>Partie {{ gameDto.status === 'running' ? 'en cours' : 'terminée' }} (tour {{
+            gameDto.currentRound
+          }})</strong>
+        <span class="flex items-center gap-1.5 text-gray-500 text-xs">{{ wsStatus }} <span
+            class="h-1.5 w-1.5 rounded-full inline-block" :class="wsConnected ? 'bg-green-400' : 'bg-red-400'"/></span>
       </div>
+
+      <!-- Dealer information -->
+      <div v-if="isGameRunning" class="bg-blue-50 border border-blue-200 rounded-lg p-3 mx-3 mb-3 text-sm">
+        <div class="flex items-center gap-3">
+          <i class="fa fa-hand-holding text-blue-600 pb-2"></i>
+          <div>
+            <strong class="text-blue-800">Distribution :</strong>
+            <span class="text-blue-700" v-if="dealerInfo"> Donnez {{cardCount}} cartes {{ dealerInfo }}</span>
+            <span class="text-blue-700" v-else> Gardez vos cartes ce tour-ci.</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Player list component -->
-      <PlayerList :players="gameDto.players" :userId="userId" :pending="gameDto.pendingRound"/>
+      <PlayerList :players="gameDto.players" :userId="userId" :pending="gameDto.pendingRound" class="mx-3 mb-3"/>
+      <div v-if="!hasEnoughPlayers" class="text-sm mt-2">En attente de plus de joueurs pour commencer la partie...</div>
       <!-- Rounds accordion showing previous rounds -->
-      <RoundsAccordion :rounds="gameDto.rounds" :players="gameDto.players" :userId="userId" />
+      <RoundsAccordion :rounds="gameDto.rounds" :players="gameDto.players" :userId="userId" class="mx-3"/>
 
       <template v-if="!isGameRunning">
-        <div class="text-sm mt-2">Partie terminée</div>
+        <div class="mt-2 flex grow items-center w-full flex-col justify-center gap-10">
+          Partie terminée
+          <div class="flex gap-3">
+            <button @click="leaveGameLocal" class="btn-secondary grow">Accueil<i class="fa fa-home ml-2"/></button>
+            <router-link to="/leaderboard" class="btn-secondary grow">
+              Leaderboard
+              <i class="fa fa-medal ml-2"/>
+            </router-link>
+          </div>
+        </div>
       </template>
       <template v-else-if="playerInGame">
+        <div class="grow"/>
         <!-- Score input or pending review are handled by components -->
-        <div v-if="!gameDto.pendingRound && hasEnoughPlayers">
+        <div v-if="!gameDto.pendingRound && hasEnoughPlayers" class="sticky bottom-0 p-3 bg-white">
           <ScoreInput :initial="scoreInput" @submit="submitScore" @invalid="onInvalidScore"/>
         </div>
 
-        <div v-else-if="hasEnoughPlayers">
+        <div v-else-if="hasEnoughPlayers" class="sticky bottom-0 bg-white p-3 shadow shadow-lg shadow-black">
           <PendingRoundReview :pending="gameDto.pendingRound" :userId="userId" :playersCount="gameDto.players.length"
-                              @ready="markReady" @reject="rejectScore"/>
-        </div>
-
-        <div v-else>
-          <div class="text-sm mt-2">En attente de plus de joueurs pour commencer la partie...</div>
+                              @ready="markReady" @reject="rejectScore" />
         </div>
       </template>
-
       <div v-else class="text-sm mt-2">Vous n'êtes pas encore dans cette partie.</div>
     </div>
-    <template v-if="playerInGame">
-      <button v-if="isGameRunning" @click="leaveGame" class="btn-secondary w-full mt-2">Quitter la partie <i
-          class="fa fa-person-through-window ml-2"/></button>
-      <button v-else @click="leaveGameLocal" class="btn-secondary w-full mt-2">Accueil <i class="fa fa-home ml-2"/>
-      </button>
-    </template>
   </div>
   <router-link v-if="!playerInGame" to="/leaderboard" class="btn-secondary w-full mb-20">
     Leaderboard

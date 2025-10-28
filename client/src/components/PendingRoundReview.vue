@@ -1,5 +1,5 @@
 <template>
-  <div class="mt-3 text-center border py-8 px-2 rounded-md border-gray-300">
+  <div class="text-center border py-8 px-2 rounded-md border-gray-300">
     <div v-if="playerScore">
       Votre score : <b>{{ playerScore.score }}</b>
       <span v-if="playerScore.autoFilled" class="text-sm text-gray-500"> (auto-calculé)</span>

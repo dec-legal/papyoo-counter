@@ -1,15 +1,15 @@
 <template>
-  <div class="border-1 rounded-md overflow-hidden border-gray-300 shadow-sm overflow-y-auto">
+  <div class="border-1 rounded-md overflow-hidden min-h-fit border-gray-300 shadow-sm">
     <table class="w-full text-left">
       <thead>
       <tr class="border-b bg-gray-100 border-gray-300 sticky top-0">
         <th class="py-2 px-2">Joueur</th>
         <th v-if="showLastColumn" class="py-2 px-2">Score</th>
-        <th class="py-2 px-2">Total</th>
+        <th class="py-2 px-2 text-center!">Total</th>
       </tr>
       </thead>
       <tbody>
-      <tr v-for="p in sortedPlayers" :key="p.id" class="hover:bg-gray-50 not-last:border-b border-gray-300">
+      <tr v-for="p in sortedPlayers" :key="p.id" class="hover:bg-gray-50 not-last:border-b border-gray-300" :class="{'font-bold!': p.id===userId}">
         <td class="py-2 px-2">
           {{ p.username }} <small v-if="p.id===userId">(Vous)</small>
         </td>
@@ -18,7 +18,7 @@
             {{ isPlayerScoreAutoFilled(p.id) ? "Calculé" : "Soumis" }}: <span :class="{'font-bold': p.id===userId}">{{ p.submittedScore }}</span>
           </span>
         </td>
-        <td class="py-2 px-2">{{ p.totalScore || 0 }}</td>
+        <td class="py-2 px-2 text-center">{{ p.totalScore || 0 }}</td>
       </tr>
       </tbody>
     </table>
@@ -44,7 +44,6 @@ export default {
   },
   computed: {
     sortedPlayers() {
-      console.log(this.pending)
       return this.players.slice().sort((a, b) => a.totalScore - b.totalScore)
     },
     showLastColumn() {

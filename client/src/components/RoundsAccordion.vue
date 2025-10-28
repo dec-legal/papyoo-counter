@@ -1,35 +1,30 @@
 <template>
-  <div class="rounded-lg overflow-y-auto grow">
-    <div v-if="!rounds || rounds.length === 0"></div>
 
-    <div v-else class="flex flex-col gap-0.5">
-      <div v-for="(r, idx) in sortedRounds" :key="r.roundNumber" class="bg-gray-100 rounded">
-        <div @click="toggle(idx)" class="w-full text-left p-3 flex justify-between items-center hover:bg-gray-100">
-          <span class="flex">
-            <span class="block">
-              <strong>Tour {{ r.roundNumber }}</strong>
-            </span>
-          </span>
-          <span class="text-sm text-gray-600">{{ (r.scores || []).length }} joueurs <i class="fa fa-chevron-down ml-2 duration-300" :class="{'rotate-180' : openIndex === idx}"></i></span>
+  <div v-if="!rounds || rounds.length === 0"></div>
 
-        </div>
-
-        <div v-show="openIndex === idx" class="m-2 rounded-md overflow-hidden border border-gray-300 shadow-sm">
-          <table class="w-full text-left">
-            <thead>
-              <tr class="border-b bg-gray-100 border-b-gray-200">
-                <th class="py-2 px-2">Joueur</th>
-                <th class="py-2 px-2">Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="s in sortedScores(r)" :key="s.id + '-' + s.score" :class="['hover:bg-gray-50 bg-white', (s.id === userId) ? 'font-semibold' : '', 'not-last:border-b border-gray-200']">
-                <td class="py-2 px-2">{{ s.username || lookupUsername(s.id) || s.id }}</td>
-                <td class="py-2 px-2">{{ s.score }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+  <div v-else class="flex gap-1 overflow-x-auto min-h-fit py-2">
+    <div v-for="(r, idx) in sortedRounds" :key="r.roundNumber"
+         class="min-w-[250px] relative h-fit bg-gray-100 rounded-lg border border-gray-300 overflow-visible">
+        <span
+            class="block font-medium text-sm absolute top-1 -translate-1/2 left-1/2 bg-gray-50 border border-gray-200 rounded-md px-1.5 py-0.5 z-10">
+          Tour {{ r.roundNumber }}
+        </span>
+      <div class="overflow-hidden min-h-fit rounded-lg">
+        <table class="w-full text-left">
+          <thead>
+          <tr class="border-b bg-gray-100 border-b-gray-200">
+            <th class="py-2 px-2">Joueur</th>
+            <th class="py-2 px-2 w-[3rem] text-center">Score</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr v-for="s in sortedScores(r)" :key="s.id + '-' + s.score"
+              :class="['hover:bg-gray-50 bg-white', (s.id === userId) ? 'font-semibold' : '', 'not-last:border-b border-gray-200']">
+            <td class="py-2 px-2">{{ s.username || lookupUsername(s.id) || s.id }}</td>
+            <td class="py-2 px-2 text-center">{{ s.score }}</td>
+          </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -39,9 +34,9 @@
 export default {
   name: 'RoundsAccordion',
   props: {
-    rounds: { type: Array, default: () => [] },
-    players: { type: Array, default: () => [] }, // optional, to map ids -> usernames
-    userId: { type: [String, Number], default: null }
+    rounds: {type: Array, default: () => []},
+    players: {type: Array, default: () => []}, // optional, to map ids -> usernames
+    userId: {type: [String, Number], default: null}
   },
   data() {
     return {
@@ -81,6 +76,12 @@ export default {
 </script>
 
 <style scoped>
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 0.5rem 0.5rem; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 0.5rem 0.5rem;
+}
 </style>

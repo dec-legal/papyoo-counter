@@ -3,13 +3,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Jaro:opsz@6..72&display=swap');
 
 :root {
+  --bg-color: #f1f1f1;
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
   color: #1e1e1e;
-  background-color: #f1f1f1;
+  background-color: var(--bg-color);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -44,7 +45,7 @@ h1 {
 button:not(.no-style), a.btn-main, a.btn-secondary {
   text-align: center;
   border-radius: 50px;
-  border: 2px solid #0a0a0a;
+  border: 2px solid currentColor;
   padding: 0.5em 1.2em;
   font-size: 1em;
   font-weight: 500;
@@ -84,15 +85,11 @@ button.no-style {
 }
 
 button.btn-danger {
-  background-color: #ef4444;
-  color: white;
-  font-weight: bold;
-  padding: 0.5rem 1rem;
-  border: none;
-  cursor: pointer;
+  color: #e10000;
+  background-color: rgba(255, 54, 54, 0.04);
 }
 button.btn-danger:hover {
-  background-color: #dc2626;
+  background-color: rgba(255, 54, 54, 0.25);
 }
 
 input {
