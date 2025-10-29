@@ -1,5 +1,5 @@
 <template>
-  <div class="border-1 rounded-md overflow-hidden min-h-fit border-gray-300 shadow-sm">
+  <div class="border-1 rounded-md overflow-hidden min-h-fit border-gray-300 shadow-sm shrink-0">
     <table class="w-full text-left">
       <thead>
       <tr class="border-b bg-gray-100 border-gray-300 sticky top-0">

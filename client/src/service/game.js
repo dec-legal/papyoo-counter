@@ -43,12 +43,6 @@ export default {
         return await res.json()
     },
 
-    async endGame() {
-        const res = await fetch('/api/game/end', { method: 'POST' })
-        if (!res.ok) throw new Error('Failed to end game')
-        return await res.json()
-    },
-
     async leaveGame(userId) {
         const res = await fetch('/api/game/leave', {
             method: 'POST',
@@ -69,12 +63,6 @@ export default {
         return await res.json()
     },
 
-    async getLeaderboard() {
-        const res = await fetch('/api/leaderboard')
-        if (!res.ok) throw new Error('Failed to get leaderboard')
-        return await res.json()
-    },
-
     async reject(userId) {
         const res = await fetch('/api/game/reject', {
             method: 'POST',
@@ -83,12 +71,6 @@ export default {
         })
         if (!res.ok) throw new Error('Failed to reject score')
         return await res.json()
-    },
-
-    async getPlayerStats(userId) {
-        const res = await fetch(`/api/player/${encodeURIComponent(userId)}/stats`)
-        if (!res.ok) throw new Error('Failed to get player stats')
-        return await res.json()
     }
-
 }
+

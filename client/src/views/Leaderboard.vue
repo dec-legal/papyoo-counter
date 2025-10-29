@@ -37,7 +37,7 @@
 </template>
 
 <script>
-import GameService from '../service/GameService'
+import StatsService from '../service/stats.js'
 
 export default {
   name: 'Leaderboard',
@@ -53,16 +53,21 @@ export default {
     if(storedId) this.$root.userId = storedId
   },
   async created() {
-    try {
-      this.leaderboard = await GameService.getLeaderboard()
-    } catch (e) {
-      this.error = 'Impossible de charger le classement.'
-      console.error(e)
-    } finally {
-      this.loading = false
-    }
+    this.load()
   },
   methods: {
+    async load() {
+      this.loading = true
+      this.error = null
+      try {
+        this.leaderboard = await StatsService.getLeaderboard()
+      } catch (e) {
+        console.error(e)
+        this.error = 'Impossible de charger le classement.'
+      } finally {
+        this.loading = false
+      }
+    },
     formatPerf(v) {
       // Ensure we have a number; show as percentage (may exceed -100% for very poor results)
       const num = (typeof v === 'number' && Number.isFinite(v)) ? v : 0

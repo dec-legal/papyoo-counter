@@ -127,7 +127,7 @@
 </template>
 
 <script>
-import GameService from '../service/GameService'
+import StatsService from '../service/stats.js'
 import dayjs from 'dayjs'
 import 'dayjs/locale/fr'
 
@@ -153,7 +153,7 @@ export default {
       this.loading = true
       this.error = null
       try {
-        this.stats = await GameService.getPlayerStats(this.userId)
+        this.stats = await StatsService.getPlayerStats(this.userId)
       } catch (e) {
         console.error(e)
         this.error = 'Impossible de charger les statistiques du joueur.'
