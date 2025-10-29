@@ -2,7 +2,7 @@
 
   <div v-if="!rounds || rounds.length === 0"></div>
 
-  <div v-else class="flex gap-1 overflow-x-auto min-h-fit py-2">
+  <div v-else class="flex gap-1 overflow-x-auto min-h-fit py-2 shrink-0">
     <div v-for="(r, idx) in sortedRounds" :key="r.roundNumber"
          class="min-w-[250px] relative h-fit bg-gray-100 rounded-lg border border-gray-300 overflow-visible">
         <span

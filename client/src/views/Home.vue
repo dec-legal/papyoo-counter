@@ -281,10 +281,10 @@ export default {
         <i class="fa fa-play-circle ml-2"/>
       </button>
     </template>
-    <div v-if="playerInGame && isGameRunning" class="flex gap-3">
-      <button @click="leaveGame" class="btn-secondary btn-danger grow">Quitter la partie <i
+    <div v-if="playerInGame && isGameRunning" class="flex gap-2">
+      <button @click="leaveGame" class="btn-secondary btn-danger grow px-2! py-1!">Quitter la partie <i
           class="fa fa-person-through-window ml-2 mt-1"/></button>
-      <router-link to="/leaderboard" class="btn-secondary grow">
+      <router-link to="/leaderboard" class="btn-secondary grow px-2! py-1!">
         Leaderboard
         <i class="fa fa-medal ml-2"/>
       </router-link>
@@ -315,7 +315,7 @@ export default {
 
       <!-- Player list component -->
       <PlayerList :players="gameDto.players" :userId="userId" :pending="gameDto.pendingRound" class="mx-3 mb-3"/>
-      <div v-if="!hasEnoughPlayers" class="text-sm mt-2">En attente de plus de joueurs pour commencer la partie...</div>
+      <div v-if="!hasEnoughPlayers" class="text-sm mt-2 mx-3">En attente de plus de joueurs pour commencer la partie...</div>
       <!-- Rounds accordion showing previous rounds -->
       <RoundsAccordion :rounds="gameDto.rounds" :players="gameDto.players" :userId="userId" class="mx-3"/>
 

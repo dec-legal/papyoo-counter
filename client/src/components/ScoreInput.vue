@@ -1,7 +1,7 @@
 <template>
-  <div class="flex gap-1 flex-row">
-    <input v-model="localScore" type="number" placeholder="Entrez votre score" class="flex-1 py-3! pl-7! input-elem" :min="0" :max="250" @keydown.enter="onSubmit" :step="1" onkeypress="return event.charCode >= 48 && event.charCode <= 57"/>
-    <button @click="onSubmit" class="btn-main py-3! btn-elem">Soumettre <i class="fa fa-hand-point-right ml-2"/></button>
+  <div class="flex gap-1 flex-row input-container rounded-full p-1">
+    <input v-model="localScore" type="number" placeholder="Entrez votre score" class="flex-1 py-2! pl-5! input-elem" :min="0" :max="250" @keydown.enter="onSubmit" :step="1" onkeypress="return event.charCode >= 48 && event.charCode <= 57"/>
+    <button @click="onSubmit" class="btn-main py-2! btn-elem">OK <i class="fa fa-hand-point-right ml-2"/></button>
   </div>
 </template>
 
@@ -32,14 +32,16 @@ export default {
 </script>
 
 <style scoped>
-.input-elem {
-  border-top-right-radius: 8px;
-  border-bottom-right-radius: 8px;
+
+.input-container {
+  border: 2px solid #4b9ace;
+  background-color: rgba(113, 171, 204, 0.13);
 }
 
-.btn-elem {
-  border-top-left-radius: 8px;
-  border-bottom-left-radius: 8px;
+input {
+  border: none;
+  outline: none;
+  background-color: transparent;
 }
 
 </style>
