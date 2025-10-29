@@ -235,35 +235,38 @@ export default {
       const roundNum = this.gameDto ? this.gameDto.currentRound : 0
       const playerCount = this.gameDto && this.gameDto.players ? this.gameDto.players.length : 0
 
-      // afficher "donner à la x eme personne à votre gauche" puis "donner à la personne en face si playerCount % 2" puis "donner à la x eme personne à votre droite"
       if (playerCount < 2) return null
 
-      // ajouter un tour "garder ses cartes" après avoir donné à tous les joueurs
-      const cycleLen = playerCount + 1
-      const dealerOffset = (roundNum - 1) % cycleLen
+      const normalizedRound = roundNum - 1
+      const dealerOffset = normalizedRound % playerCount
 
-      if (dealerOffset === playerCount) {
+      // Le dernier tour du cycle = garder ses cartes
+      if (dealerOffset === playerCount - 1) {
         return null; // garder ses cartes
       }
 
       if (dealerOffset === 0) {
         return `à la personne à votre gauche`
-      } else if (playerCount % 2 === 0 && dealerOffset === playerCount / 2) {
-        return `à la personne en face de vous`
-      } else if (dealerOffset < playerCount / 2) {
-        return `à la ${dealerOffset + 1}ème personne à votre gauche`
-      } else {
-        const rightOffset = playerCount - dealerOffset
-        if (rightOffset === 1) {
-          return `à la personne à votre droite`
-        }
-        return `à la ${rightOffset}ème personne à votre droite`
       }
+
+      if (playerCount % 2 === 0 && dealerOffset === Math.floor(playerCount / 2) - 1) {
+        return `à la personne en face de vous`
+      }
+
+      if (dealerOffset < Math.floor(playerCount / 2)) {
+        return `à la ${dealerOffset + 1}ème personne à votre gauche`
+      }
+
+      const rightOffset = playerCount - 1 - dealerOffset
+      if (rightOffset === 1) {
+        return `à la personne à votre droite`
+      }
+      return `à la ${rightOffset}ème personne à votre droite`
     },
     cardCount(){
-      const cardCountsToGive = [5, 5, 4, 3, 3, 3, 2, 2, 1]
+      const cardCountsToGive = [-1, -1, 5, 5, 5, 4, 3, 3, 3, 2, 2, 1]
       const playerCount = this.gameDto && this.gameDto.players ? this.gameDto.players.length : 0
-      return cardCountsToGive[playerCount - 2] || 1
+      return cardCountsToGive[playerCount] || 1
     }
   }
 }
