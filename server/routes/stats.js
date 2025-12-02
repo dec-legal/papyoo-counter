@@ -4,32 +4,91 @@ import { ObjectId } from 'mongodb'
 
 const router = express.Router()
 
+const buildPerformanceExpr = (scorePath, numPlayersPath) => ({
+  $let: {
+    vars: {
+      scoreValue: scorePath,
+      expectedShare: {
+        $cond: [
+          { $gt: [numPlayersPath, 0] },
+          { $divide: [250, numPlayersPath] },
+          250
+        ]
+      }
+    },
+    in: {
+      $cond: [
+        { $lte: ['$$scoreValue', '$$expectedShare'] },
+        {
+          $subtract: [
+            1,
+            {
+              $min: [
+                1,
+                {
+                  $divide: [
+                    '$$scoreValue',
+                    { $cond: [{ $eq: ['$$expectedShare', 0] }, 1, '$$expectedShare'] }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          $multiply: [
+            -1,
+            {
+              $min: [
+                1,
+                {
+                  $divide: [
+                    { $max: [0, { $subtract: ['$$scoreValue', '$$expectedShare'] }] },
+                    { $max: [1, { $subtract: [250, '$$expectedShare'] }] }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+})
+
 router.get('/leaderboard', async (req, res) => {
     try {
       const historyCollection = getGameHistoryCollection()
       const playersCollection = getPlayersCollection()
+      const { mode = 'monthly', year, month } = req.query
+      let dateMatch = null
+      if (mode === 'monthly') {
+        const parsedYear = Number(year) || new Date().getFullYear()
+        const parsedMonth = Number(month) || (new Date().getMonth() + 1)
+        if (parsedMonth < 1 || parsedMonth > 12) {
+          return res.status(400).json({ error: 'Invalid month' })
+        }
+        const start = new Date(parsedYear, parsedMonth - 1, 1)
+        const end = new Date(parsedYear, parsedMonth, 1)
+        dateMatch = { finalizedAt: { $gte: start, $lt: end } }
+      } else if (mode !== 'all-time') {
+        return res.status(400).json({ error: 'Invalid mode' })
+      }
 
-      // Compute a per-score performance index normalized by number of players in the round:
-      // performance = 1 - (score / (250 / numPlayers)) = 1 - (score * numPlayers / 250)
-      // Higher is better. A perfectly average player scores 250/numPlayers each round = 0% performance.
-      const stats = await historyCollection.aggregate([
-        // compute numPlayers for each round document
+      const pipeline = []
+      if (dateMatch) pipeline.push({ $match: dateMatch })
+      pipeline.push(
         { $addFields: { numPlayers: { $size: '$scores' } } },
-        // unwind scores into one document per player per round
         { $unwind: '$scores' },
-        // project fields we need and compute per-round performance
         {
           $project: {
             userId: '$scores.userId',
             username: '$scores.username',
             score: '$scores.score',
             numPlayers: '$numPlayers',
-            performance: {
-              $subtract: [1, { $divide: [{ $multiply: ['$scores.score', '$numPlayers'] }, 250] }]
-            }
+            performance: buildPerformanceExpr('$scores.score', '$numPlayers')
           }
         },
-        // group by user and average the performance across rounds
         {
           $group: {
             _id: '$userId',
@@ -45,7 +104,9 @@ router.get('/leaderboard', async (req, res) => {
             _id: 0
           }
         }
-      ]).toArray()
+      )
+
+      const stats = await historyCollection.aggregate(pipeline).toArray()
 
       // Get player usernames (same logic as before to handle different id types)
       const playerIds = stats.map(s => s.userId)
@@ -130,9 +191,7 @@ router.get('/player/:userId/stats', async (req, res) => {
             roundNumber: '$roundNumber',
             finalizedAt: 1,
             gameId: 1,
-            performance: {
-              $subtract: [1, { $divide: [{ $multiply: ['$scores.score', '$numPlayers'] }, 250] }]
-            },
+            performance: buildPerformanceExpr('$scores.score', '$numPlayers'),
             // rank = 1 + count of players with strictly lower score (lower is better)
             rank: {
               $add: [
@@ -140,10 +199,7 @@ router.get('/player/:userId/stats', async (req, res) => {
                 { $size: { $filter: { input: '$allScores', as: 'o', cond: { $lt: ['$$o.score', '$scores.score'] } } } }
               ]
             },
-            // Clamp per-round performance to [-1, 1] for extrema computations using the same formula
-            performanceClamped: {
-              $max: [ -1, { $min: [ 1, { $subtract: [ 1, { $divide: [ { $multiply: ['$scores.score', '$numPlayers'] }, 250 ] } ] } ] } ]
-            }
+            performanceClamped: buildPerformanceExpr('$scores.score', '$numPlayers')
           }
         },
         // sort by most recent rounds
@@ -191,9 +247,7 @@ router.get('/player/:userId/stats', async (req, res) => {
         {
           $project: {
             userId: '$scores.userId',
-            performance: {
-              $subtract: [1, { $divide: [{ $multiply: ['$scores.score', '$numPlayers'] }, 250] }]
-            }
+            performance: buildPerformanceExpr('$scores.score', '$numPlayers')
           }
         },
         {
