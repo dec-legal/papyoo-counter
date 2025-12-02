@@ -8,16 +8,26 @@ router.get('/leaderboard', async (req, res) => {
     try {
       const historyCollection = getGameHistoryCollection()
       const playersCollection = getPlayersCollection()
+      const { mode = 'monthly', year, month } = req.query
+      let dateMatch = null
+      if (mode === 'monthly') {
+        const parsedYear = Number(year) || new Date().getFullYear()
+        const parsedMonth = Number(month) || (new Date().getMonth() + 1)
+        if (parsedMonth < 1 || parsedMonth > 12) {
+          return res.status(400).json({ error: 'Invalid month' })
+        }
+        const start = new Date(parsedYear, parsedMonth - 1, 1)
+        const end = new Date(parsedYear, parsedMonth, 1)
+        dateMatch = { finalizedAt: { $gte: start, $lt: end } }
+      } else if (mode !== 'all-time') {
+        return res.status(400).json({ error: 'Invalid mode' })
+      }
 
-      // Compute a per-score performance index normalized by number of players in the round:
-      // performance = 1 - (score / (250 / numPlayers)) = 1 - (score * numPlayers / 250)
-      // Higher is better. A perfectly average player scores 250/numPlayers each round = 0% performance.
-      const stats = await historyCollection.aggregate([
-        // compute numPlayers for each round document
+      const pipeline = []
+      if (dateMatch) pipeline.push({ $match: dateMatch })
+      pipeline.push(
         { $addFields: { numPlayers: { $size: '$scores' } } },
-        // unwind scores into one document per player per round
         { $unwind: '$scores' },
-        // project fields we need and compute per-round performance
         {
           $project: {
             userId: '$scores.userId',
@@ -29,7 +39,6 @@ router.get('/leaderboard', async (req, res) => {
             }
           }
         },
-        // group by user and average the performance across rounds
         {
           $group: {
             _id: '$userId',
@@ -45,7 +54,9 @@ router.get('/leaderboard', async (req, res) => {
             _id: 0
           }
         }
-      ]).toArray()
+      )
+
+      const stats = await historyCollection.aggregate(pipeline).toArray()
 
       // Get player usernames (same logic as before to handle different id types)
       const playerIds = stats.map(s => s.userId)
