@@ -4,56 +4,19 @@ import { ObjectId } from 'mongodb'
 
 const router = express.Router()
 
+// perf = 2 * (250/n - score) / 250
+// Zero-sum per round (scores always sum to 250), fair across table sizes.
+// Range: [+2/n - 0, +2/n - 2] i.e. unbounded negative for large n.
 const buildPerformanceExpr = (scorePath, numPlayersPath) => ({
-  $let: {
-    vars: {
-      scoreValue: scorePath,
-      expectedShare: {
-        $cond: [
-          { $gt: [numPlayersPath, 0] },
-          { $divide: [250, numPlayersPath] },
-          250
-        ]
-      }
-    },
-    in: {
-      $cond: [
-        { $lte: ['$$scoreValue', '$$expectedShare'] },
-        {
-          $subtract: [
-            1,
-            {
-              $min: [
-                1,
-                {
-                  $divide: [
-                    '$$scoreValue',
-                    { $cond: [{ $eq: ['$$expectedShare', 0] }, 1, '$$expectedShare'] }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        {
-          $multiply: [
-            -1,
-            {
-              $min: [
-                1,
-                {
-                  $divide: [
-                    { $max: [0, { $subtract: ['$$scoreValue', '$$expectedShare'] }] },
-                    { $max: [1, { $subtract: [250, '$$expectedShare'] }] }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
+  $divide: [
+    {
+      $multiply: [
+        2,
+        { $subtract: [{ $divide: [250, numPlayersPath] }, scorePath] }
       ]
-    }
-  }
+    },
+    250
+  ]
 })
 
 router.get('/leaderboard', async (req, res) => {
@@ -100,7 +63,7 @@ router.get('/leaderboard', async (req, res) => {
           $project: {
             userId: '$_id',
             avgPerformance: 1,
-            gamesPlayed: '$roundsPlayed',
+            roundsPlayed: 1,
             _id: 0
           }
         }
@@ -202,9 +165,7 @@ router.get('/player/:userId/stats', async (req, res) => {
             performanceClamped: buildPerformanceExpr('$scores.score', '$numPlayers')
           }
         },
-        // sort by most recent rounds
-        { $sort: { finalizedAt: -1 } },
-        // aggregate per-player stats
+        // aggregate per-player stats (order within $group/$push is not guaranteed)
         {
           $group: {
             _id: '$userId',
@@ -218,7 +179,7 @@ router.get('/player/:userId/stats', async (req, res) => {
             recentRounds: { $push: { roundNumber: '$roundNumber', score: '$score', numPlayers: '$numPlayers', performance: '$performance', rank: '$rank', finalizedAt: '$finalizedAt', gameId: '$gameId' } }
           }
         },
-        // limit recent rounds to last 20 and compute percentages
+        // sort recentRounds by most recent first, then slice to last 20
         {
           $project: {
             username: 1,
@@ -228,7 +189,12 @@ router.get('/player/:userId/stats', async (req, res) => {
             avgScore: 1,
             zeros: 1,
             fulls: 1,
-            recentRounds: { $slice: ['$recentRounds', 20] }
+            recentRounds: {
+              $slice: [
+                { $sortArray: { input: '$recentRounds', sortBy: { finalizedAt: -1 } } },
+                20
+              ]
+            }
           }
         }
       ]

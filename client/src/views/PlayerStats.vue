@@ -42,7 +42,7 @@
               <i v-else-if="performanceTrend === 'down'" class="fa fa-arrow-trend-down text-red-500"></i>
             </div>
           </div>
-          <div class="text-xs text-gray-400">(plus élevé = mieux)</div>
+          <div class="text-xs text-gray-400">(positif = mieux que la moyenne)</div>
         </div>
 
         <div class="p-3 rounded-lg shadow-sm border border-gray-300 bg-white">
@@ -182,8 +182,7 @@ export default {
     },
     formatPerf(v) {
       const num = (typeof v === 'number' && Number.isFinite(v)) ? v : 0
-      const clamped = Math.max(-1, Math.min(1, num))
-      return (clamped * 100).toFixed(1) + '%'
+      return (num * 100).toFixed(1) + '%'
     },
     shortId(s) {
       if (!s) return ''
@@ -275,10 +274,19 @@ export default {
         // Calculate average performance for the game
         const avgPerformance = rounds.reduce((sum, r) => sum + (r.performance || 0), 0) / rounds.length
 
-        // Get final rank from the last round (approximation)
-        // In reality, we'd need to calculate cumulative scores for all players
-        const finalRank = rounds[rounds.length - 1]?.rank || 1
+        // Approximate cumulative rank: count how many rounds the player finished last vs first.
+        // We only have this player's per-round rank, not all players' cumulative totals,
+        // so we use the rank from the final round as the best available approximation.
         const numPlayers = rounds[0]?.numPlayers || 1
+        const totalScore = rounds.reduce((sum, r) => sum + (r.score || 0), 0)
+        // rank by total score: use the last round's rank field which reflects position in that round,
+        // but recompute as a simple majority: if more rounds were rank 1 than last, show 1st, etc.
+        const rankCounts = {}
+        for (const r of rounds) {
+          rankCounts[r.rank] = (rankCounts[r.rank] || 0) + 1
+        }
+        const dominantRank = Object.entries(rankCounts).sort((a, b) => b[1] - a[1])[0]?.[0]
+        const finalRank = dominantRank ? Number(dominantRank) : (rounds[rounds.length - 1]?.rank || 1)
 
         return {gameId, rounds, latestAt, avgPerformance, finalRank, numPlayers}
       })
@@ -290,22 +298,15 @@ export default {
       const games = this.groupedGames
       if (!games || games.length < 2) return 'stable'
 
-      // Prendre les 3 dernières parties (ou moins si pas assez de données)
-      const recentGames = games.slice(0, Math.min(3, games.length))
+      // Compare the most recent game against the average of all prior games (up to 5).
+      // groupedGames is sorted newest-first.
+      const window = games.slice(0, Math.min(6, games.length))
+      const newerGame = window[0]
+      const olderGames = window.slice(1)
 
-      // Calculer la moyenne des performances de la première moitié vs deuxième moitié
-      const mid = Math.floor(recentGames.length / 2)
-      const olderGames = recentGames.slice(mid)
-      const newerGames = recentGames.slice(0, mid)
-
-      if (newerGames.length === 0 || olderGames.length === 0) return 'stable'
-
-      const avgNewer = newerGames.reduce((sum, g) => sum + (g.avgPerformance || 0), 0) / newerGames.length
       const avgOlder = olderGames.reduce((sum, g) => sum + (g.avgPerformance || 0), 0) / olderGames.length
+      const diff = (newerGame.avgPerformance || 0) - avgOlder
 
-      const diff = avgNewer - avgOlder
-
-      // Seuil de 5% pour considérer un changement significatif
       if (diff > 0.05) return 'up'
       if (diff < -0.05) return 'down'
       return 'stable'

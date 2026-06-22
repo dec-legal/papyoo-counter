@@ -40,7 +40,7 @@
           <tr class="bg-gray-100 border-b border-gray-300">
             <th class="p-2">Joueur</th>
             <th class="p-2 text-right">Indice perf</th>
-            <th class="p-2 text-right">Rounds</th>
+            <th class="p-2 text-right">Rounds joués</th>
           </tr>
           </thead>
           <tbody>
@@ -55,12 +55,12 @@
               <i v-if="index === 0" class="text-sm fa fa-crown absolute text-yellow-500 rotate-12 -translate-x-2 -translate-y-1"></i>
             </td>
             <td class="p-2 text-right">{{ formatPerf(player.avgPerformance) }}</td>
-            <td class="p-2 text-right">{{ player.gamesPlayed }}</td>
+            <td class="p-2 text-right">{{ player.roundsPlayed }}</td>
           </tr>
           </tbody>
         </table>
       </div>
-      <div class="text-xs text-gray-500 mt-2">Indice : indicateur de performance, 100% revient à prendre zero points à tous les rounds, -100% revient à prendre 250 points à tous les rounds.</div>
+      <div class="text-xs text-gray-500 mt-2">Indice : indicateur de performance centré sur le score attendu (250 / nombre de joueurs). Positif = mieux que la moyenne, négatif = moins bien. L'amplitude dépend du nombre de joueurs par partie.</div>
     </div>
     <div v-else-if="!loading" class="text-center text-gray-500 mt-4">
       Aucune donnée de classement disponible.
